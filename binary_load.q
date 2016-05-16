@@ -1,34 +1,64 @@
-
+/ TODO: NAGYOBB CHUNKOKBAN VALO BEOLVASAS
+/ TODO: http://code.kx.com/wiki/Reference/xasc sort table on disk
 / Methods
-loadQuote:{do[(count qidx);
-	idx:first select from qidx where i=c;
-	chunkbeg:(idx`end);
-	chunkrows:(idx`end)-(idx`beg);   /number of rows to process in each chunk
-	c:c+1;
+filterQuote:{[quote;idx]
+	divider:100000000;
+	select sym:idx`sym,time,bid%divider,ask%divider,ex from quote where ex="N"};
 
-   	data:flip columns!(types;widths)1:(file;x;chunkrows*sumWidths);
-   	data:select date:idx`date,sym:idx`sym,time,bid%divider,ask%divider,ex from data where ex="N"; /upsert to quote
-	
-	path: ` $ ("/" sv (":e:";"taq";"quote";string (idx`date);""));
-   
-	path upsert .Q.en[`:e:/taq] data;
+loadAndSaveData:{[fullIdx;widths;types;columns;file;rootPathSym;dataTypeSym;filter]c:0;
+	x:0;
+	sumWidths:sum widths;
 
-	x:x+chunkrows*sum widths;]};
+	do[(count fullIdx);
+		idx:first select from fullIdx where i=c;
+		
+		chunkbeg:(idx`end);
+		chunkrows:(idx`end)-(idx`beg);   /number of rows to process in each chunk
+		
+		c:c+1;
+	   	
+	   	data:flip columns!(types;widths)1:(file;x;chunkrows*sumWidths);
+	   	data:filter[data;idx];
+		
+		dateSym:` $ string (idx`date);
+
+		path:` sv (rootPathSym,dateSym,dataTypeSym,`); /sv: concat list element with /
+		path upsert .Q.en[rootPathSym] data;
+
+		x:x+chunkrows*sum widths]
+	};
 
 /----------------------------------------------------------
 
-qidx:flip `sym`date`beg`end!("siii";10 4 4 4) 1: `:data/Q200405A.IDX;
-qidx:select sym,"D"$ string date,beg,end from qidx;
+qcolumns:`time`bid`ask`s`bsize`asize`mode`ex`mmid;
 
-file:`:data/Q200405A.BIN;
+qtypes:"vjjiiihcs";
+qwidths:4 8 8 4 4 4 2 1 4;
+dest:`:e:/taq
 
-columns:`time`bid`ask`s`bsize`asize`mode`ex`mmid;
 
-types:"vjjiiihcs";
-widths:4 8 8 4 4 4 2 1 4;
-sumWidths:sum widths;
-divider:100000000;
+srcRoot:`:data;
 
-c:0;
-x:0;
+files: key srcRoot;
+qbins: files where files like"Q*[0-9][A-Z].BIN";
+qidxs: files where files like"Q*[0-9][A-Z].IDX";
+tbins: files where files like"T*[0-9][A-Z].IDX";
+tidxs: files where files like"T*[0-9][A-Z].IDX";
+
+if[(count qbins)<>(count qidxs);' "Q idx and bin files count dont match!"];
+if[(count tbins)<>(count tidxs);' "T idx and bin files count dont match!"];
+
+cq:0;
+do[count qbins;
+
+	qfile:` sv (srcRoot,qbins[cq])
+	show qfile;
+
+	qidx:flip `sym`date`beg`end!("siii";10 4 4 4) 1: ` sv (srcRoot,qidxs[cq])
+	qidx:select sym,"D"$ string date,beg,end from qidx;
+	cq:cq+1;
+
+	show .z.T;
+	loadAndSaveData[qidx;qwidths;qtypes;qcolumns;qfile;dest;`quote;filterQuote];
+	show .z.T;]
 
