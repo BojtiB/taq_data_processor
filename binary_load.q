@@ -15,14 +15,20 @@ filterQuote:{[quote;idx]
 
 filterTrade:{[trade;idx]
 		data:select sym:idx`sym,time,price%divider,size,initiation:`none from trade where ex="N";
-		quotePart:select from quote where date=idx`date,sym=idx`sym;
-		err;
+		quotePart:`time xdesc select from quote where date=idx`date,sym=idx`sym;
+
 		ct:0;
 		do[count data;
-			data[ct]
+			midquote:(first select from quotePart where time<=((data[ct;`time])-00:00:05))`midquote;
+			$[(data[ct;`price]>midquote) & (midquote<>0n);
+				data[ct;`initiation]:`buyer;
+				if[data[ct;`price]<midquote;
+					data[ct;`initiation]:`seller]
+			];
 
 			ct:ct+1
-		]
+		];
+		data
 	};
 
 loadAndSaveData:{[fullIdx;widths;types;columns;file;rootPathSym;dataTypeSym;filter]
@@ -49,7 +55,8 @@ loadAndSaveData:{[fullIdx;widths;types;columns;file;rootPathSym;dataTypeSym;filt
 	};
 
 /----------------------------------------------------------
-dest:`:e:/taq3
+destStr:"e:/taq4";
+dest:` $ (":",destStr);
 srcRoot:`:e:/q/data;
 
 qcolumns:`time`bid`ask`s`bsize`asize`mode`ex`mmid;
@@ -70,9 +77,7 @@ tidxs: files where files like"T*[0-9][A-Z].IDX";
 
 if[(count qbins)<>(count qidxs);' "Q idx and bin files count dont match!"];
 if[(count tbins)<>(count tidxs);' "T idx and bin files count dont match!"];
-if[(count qbins)<>(count tbins);' "T idx and bin files count dont match!"];
-
-
+if[(count qbins)<>(count tbins);' "T and Q bin files count dont match!"];
 
 show "Now we will process Q bin, Q idx, T bin and T idx files. Count: ";
 show 4*(count qbins);
@@ -88,25 +93,35 @@ do[count qbins;
 	cq:cq+1;
 
 	show .z.T;
-/NEMMENT!!!!	loadAndSaveData[qidx;qwidths;qtypes;qcolumns;qfile;dest;`quote;filterQuote];
-	show .z.T;]
+	/loadAndSaveData[qidx;qwidths;qtypes;qcolumns;qfile;dest;`quote;filterQuote];
+	show .z.T]
 
-load dest;
+/ Sorting quote by sym
+dirs:dirs:asc key dest;
+datedirs:dirs where dirs like"[0-9][0-9][0-9][0-9].[0-1][0-9].[0-3][0-9]";
 
-tq:0;	
-do[count tbins;
+cd:0;
+do[count datedirs;
+	ddir:` sv (dest,datedirs[cd],`quote);
+	cd:cd+1;
+	show ddir;
+	`sym xasc ddir
+	];
 
-	tfile:` sv (srcRoot,tbins[tq]);
+system ("l ",destStr);
+
+	
+{[tbin]
+
+	tfile:` sv (srcRoot,tbin);
 	show tfile;
 
-	tidx:flip `sym`date`beg`end!("siii";10 4 4 4) 1: ` sv (srcRoot,tidxs[tq]);
+	tidx:flip `sym`date`beg`end!("siii";10 4 4 4) 1: ` sv (srcRoot,tidxs[ct]);
 	tidx:select sym,"D"$ string date,beg,end from tidx;
-
-	tq:tq+1;
 
 	show .z.T;
 	loadAndSaveData[tidx;twidths;ttypes;tcolumns;tfile;dest;`trade;filterTrade];
-	show .z.T;]
+	show .z.T} peach tbins;
 
 
 
